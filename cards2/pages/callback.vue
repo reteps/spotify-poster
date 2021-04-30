@@ -21,6 +21,11 @@
               <v-list-item-title v-text="playlist.name"></v-list-item-title>
             </v-list-item-content>
           </v-list-item>
+          <v-list-item key="saved_albums" value="saved_albums">
+            <v-list-item-content>
+              <v-list-item-title v-text="'Saved Albums'"></v-list-item-title>
+            </v-list-item-content>
+          </v-list-item>
         </v-list-item-group>
         </v-list>
         </v-card-text>
@@ -33,7 +38,7 @@
       </div>
       <div v-else>
         <v-list-item @click='selectedPlaylist = null;loadingProgress = 0' :key="playlist.id">
-          <v-list-item-avatar tile><v-img :src="playlist.images[0].url"></v-img></v-list-item-avatar>
+          <v-list-item-avatar tile><v-img v-if="playlist.id !== -1" :src="playlist.images[0].url"></v-img></v-list-item-avatar>
           <v-list-item-content>
             <v-list-item-title v-text="playlist.name"></v-list-item-title>
           </v-list-item-content>
@@ -219,7 +224,10 @@ export default {
       return `https://accounts.spotify.com/authorize?client_id=${this.clientID}&response_type=token&redirect_uri=${this.callback}`
     },
     playlist() {
-      return this.playlists[this.selectedPlaylist]
+      return this.isSavedAlbums ? {id: -1} : this.playlists[this.selectedPlaylist]
+    },
+    isSavedAlbums() {
+      return this.selectedPlaylist === 'saved_albums'
     },
     calcWidth() {
       return (this.margin*this.colCount*2 + 640*this.colCount)*this.quality/100
@@ -323,19 +331,19 @@ export default {
 
     });
     },
-    loadTracks() {
+    async loadTracks() {
+      let chunks = this.isSavedAlbums ? 50 : 100
       this.loadingProgress = 0
-      this.maxRequests = Math.ceil(this.playlist.tracks.total / 100)
+      this.maxRequests = Math.ceil((this.isSavedAlbums ? (await this.$axios.get('https://api.spotify.com/v1/me/albums', {headers: {Authorization: `Bearer ${this.accessToken}`}})).data.total : this.playlist.tracks.total) / chunks)
       this.raw = []
       this.unprocessed = []
       this.processed = []
 
       console.log('Loading Tracks....')
-      let selectedPlaylistTrackURL = this.playlist.tracks.href
-      let offsets = [...Array(this.maxRequests).keys()]
+      let selectedPlaylistTrackURL = this.isSavedAlbums ? 'https://api.spotify.com/v1/me/albums' : this.playlist.tracks.href
       let vm = this;
-      offsets.forEach(n => {
-        this.$axios.get(selectedPlaylistTrackURL, { params: {offset: n*100}, headers: {Authorization: `Bearer ${this.accessToken}`}}).then(res => {
+      for (let n = 0; n < this.maxRequests; n++) {
+        this.$axios.get(selectedPlaylistTrackURL, { params: {offset: n*chunks, limit: chunks}, headers: {Authorization: `Bearer ${this.accessToken}`}}).then(res => {
           vm.loadingProgress++
           vm.raw = vm.raw.concat(...res.data.items)
         }).catch(err => {
@@ -343,7 +351,7 @@ export default {
             window.location = vm.authURL
           }
         })
-      })
+      }
     },
     getDiagonal(songList, width, height) {
       songList = songList.sort(this.sortFunctions[this.sortType])
@@ -393,6 +401,7 @@ export default {
           const img = new Image();
           img.crossOrigin = 'Anonymous'
 
+          if (this.isSavedAlbums) s.track = s
           img.src = s.track.album.images[2].url;
 
           img.addEventListener('load', function() {
@@ -451,7 +460,7 @@ export default {
     processTracks() {
       let vm = this;
       this.processing = true
-      this.raw = this.raw.filter(s => s.track !== null).filter(s => s.track.album.images.length >= 3)
+      this.raw = this.raw.filter(s => s.track !== null).map(s => s.track ? s : Object.assign(s, {track: s})).filter(s => s.track.album.images.length >= 3)
       this.generateProcessedImages(this.raw, this.unprocessed)
       .then(unprocessedSongs => {
         console.log('UNPROCESSED =>', unprocessedSongs)

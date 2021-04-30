@@ -51,7 +51,7 @@ export default {
   },
   computed: {
     authURL() {
-      return `https://accounts.spotify.com/authorize?client_id=${this.clientID}&response_type=token&redirect_uri=${this.callback}`
+      return `https://accounts.spotify.com/authorize?client_id=${this.clientID}&response_type=token&redirect_uri=${this.callback}&scope=user-library-read`
     }
   }
 }
