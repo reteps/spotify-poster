@@ -26,6 +26,11 @@
               <v-list-item-title v-text="'Saved Albums'"></v-list-item-title>
             </v-list-item-content>
           </v-list-item>
+          <v-list-item key="saved_tracks" value="saved_tracks">
+            <v-list-item-content>
+              <v-list-item-title v-text="'Saved Tracks'"></v-list-item-title>
+            </v-list-item-content>
+          </v-list-item>
         </v-list-item-group>
         </v-list>
         </v-card-text>
@@ -224,10 +229,16 @@ export default {
       return `https://accounts.spotify.com/authorize?client_id=${this.clientID}&response_type=token&redirect_uri=${this.callback}`
     },
     playlist() {
-      return this.isSavedAlbums ? {id: -1} : this.playlists[this.selectedPlaylist]
+      return this.isLibrary ? {id: -1} : this.playlists[this.selectedPlaylist]
+    },
+    isLibrary() {
+      return this.isSavedAlbums || this.isSavedTracks
     },
     isSavedAlbums() {
       return this.selectedPlaylist === 'saved_albums'
+    },
+    isSavedTracks() {
+      return this.selectedPlaylist === 'saved_tracks'
     },
     calcWidth() {
       return (this.margin*this.colCount*2 + 640*this.colCount)*this.quality/100
@@ -332,15 +343,16 @@ export default {
     });
     },
     async loadTracks() {
-      let chunks = this.isSavedAlbums ? 50 : 100
+      let chunks = this.isLibrary ? 50 : 100
+      let length = this.isLibrary ? (await this.$axios.get(`https://api.spotify.com/v1/me/${this.isSavedAlbums ? 'albums' : 'tracks'}`, {headers: {Authorization: `Bearer ${this.accessToken}`}})).data.total : this.playlist.tracks.total
       this.loadingProgress = 0
-      this.maxRequests = Math.ceil((this.isSavedAlbums ? (await this.$axios.get('https://api.spotify.com/v1/me/albums', {headers: {Authorization: `Bearer ${this.accessToken}`}})).data.total : this.playlist.tracks.total) / chunks)
+      this.maxRequests = Math.ceil(length / chunks)
       this.raw = []
       this.unprocessed = []
       this.processed = []
 
       console.log('Loading Tracks....')
-      let selectedPlaylistTrackURL = this.isSavedAlbums ? 'https://api.spotify.com/v1/me/albums' : this.playlist.tracks.href
+      let selectedPlaylistTrackURL = this.isLibrary ? `https://api.spotify.com/v1/me/${this.isSavedAlbums ? 'albums' : 'tracks'}` : this.playlist.tracks.href
       let vm = this;
       for (let n = 0; n < this.maxRequests; n++) {
         this.$axios.get(selectedPlaylistTrackURL, { params: {offset: n*chunks, limit: chunks}, headers: {Authorization: `Bearer ${this.accessToken}`}}).then(res => {
